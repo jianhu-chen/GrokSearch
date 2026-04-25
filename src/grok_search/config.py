@@ -84,10 +84,6 @@ class Config:
         return key
 
     @property
-    def switch_model_enabled(self) -> bool:
-        return os.getenv("ENABLE_SWITCH_MODEL", "false").lower() in ("true", "1", "yes")
-
-    @property
     def tavily_enabled(self) -> bool:
         return os.getenv("TAVILY_ENABLED", "true").lower() in ("true", "1", "yes")
 

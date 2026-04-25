@@ -21,8 +21,6 @@
 | `MCP_TRANSPORT` | `stdio` | 传输模式：`stdio`（本地）或 `http`（远程） |
 | `MCP_AUTH_TOKENS` | _(空)_ | 用户认证 Token，逗号分隔（为空则不启用认证） |
 | `MCP_AUTH_TOKENS_FILE` | _(空)_ | Token 文件路径，每行一个 |
-| `ENABLE_SWITCH_MODEL` | `false` | 是否暴露 `switch_model` 工具。云端多用户场景下，任一用户切换模型会持久化并影响所有用户，因此默认关闭 |
-
 ## 快速部署
 
 `docker-compose.yml` 默认使用 GHCR 预构建镜像，如需从源码构建可将 `build: .` 取消注释并注释 `image` 行。

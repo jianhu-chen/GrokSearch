@@ -543,57 +543,56 @@ async def get_config_info() -> str:
     return json.dumps(config_info, ensure_ascii=False, indent=2)
 
 
-if config.switch_model_enabled:
-    @mcp.tool(
-        name="switch_model",
-        output_schema=None,
-        description="""
-        Switches the default Grok model used for search and fetch operations, persisting the setting.
+@mcp.tool(
+    name="switch_model",
+    output_schema=None,
+    description="""
+    Switches the default Grok model used for search and fetch operations, persisting the setting.
 
-        **Key Features:**
-            - **Model Selection:** Change the AI model for web search and content fetching.
-            - **Persistent Storage:** Model preference saved to ~/.config/grok-search/config.json.
-            - **Immediate Effect:** New model used for all subsequent operations.
+    **Key Features:**
+        - **Model Selection:** Change the AI model for web search and content fetching.
+        - **Persistent Storage:** Model preference saved to ~/.config/grok-search/config.json.
+        - **Immediate Effect:** New model used for all subsequent operations.
 
-        **Edge Cases & Best Practices:**
-            - Use get_config_info to verify available models before switching.
-            - Invalid model IDs may cause API errors in subsequent requests.
-            - Model changes persist across sessions until explicitly changed again.
-        """,
-        meta={"version": "1.3.0", "author": "guda.studio"},
-    )
-    async def switch_model(
-        model: Annotated[str, "Model ID to switch to (e.g., 'grok-4-fast', 'grok-2-latest', 'grok-vision-beta')."]
-    ) -> str:
-        import json
+    **Edge Cases & Best Practices:**
+        - Use get_config_info to verify available models before switching.
+        - Invalid model IDs may cause API errors in subsequent requests.
+        - Model changes persist across sessions until explicitly changed again.
+    """,
+    meta={"version": "1.3.0", "author": "guda.studio"},
+)
+async def switch_model(
+    model: Annotated[str, "Model ID to switch to (e.g., 'grok-4-fast', 'grok-2-latest', 'grok-vision-beta')."]
+) -> str:
+    import json
 
-        try:
-            previous_model = config.grok_model
-            config.set_model(model)
-            current_model = config.grok_model
+    try:
+        previous_model = config.grok_model
+        config.set_model(model)
+        current_model = config.grok_model
 
-            result = {
-                "status": "✅ 成功",
-                "previous_model": previous_model,
-                "current_model": current_model,
-                "message": f"模型已从 {previous_model} 切换到 {current_model}",
-                "config_file": str(config.config_file)
-            }
+        result = {
+            "status": "✅ 成功",
+            "previous_model": previous_model,
+            "current_model": current_model,
+            "message": f"模型已从 {previous_model} 切换到 {current_model}",
+            "config_file": str(config.config_file)
+        }
 
-            return json.dumps(result, ensure_ascii=False, indent=2)
+        return json.dumps(result, ensure_ascii=False, indent=2)
 
-        except ValueError as e:
-            result = {
-                "status": "❌ 失败",
-                "message": f"切换模型失败: {str(e)}"
-            }
-            return json.dumps(result, ensure_ascii=False, indent=2)
-        except Exception as e:
-            result = {
-                "status": "❌ 失败",
-                "message": f"未知错误: {str(e)}"
-            }
-            return json.dumps(result, ensure_ascii=False, indent=2)
+    except ValueError as e:
+        result = {
+            "status": "❌ 失败",
+            "message": f"切换模型失败: {str(e)}"
+        }
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except Exception as e:
+        result = {
+            "status": "❌ 失败",
+            "message": f"未知错误: {str(e)}"
+        }
+        return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 @mcp.tool(
