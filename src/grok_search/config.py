@@ -84,6 +84,10 @@ class Config:
         return key
 
     @property
+    def switch_model_enabled(self) -> bool:
+        return os.getenv("ENABLE_SWITCH_MODEL", "false").lower() in ("true", "1", "yes")
+
+    @property
     def tavily_enabled(self) -> bool:
         return os.getenv("TAVILY_ENABLED", "true").lower() in ("true", "1", "yes")
 
@@ -131,6 +135,16 @@ class Config:
         tmp_log_dir = Path("/tmp") / "grok-search" / log_dir_str
         tmp_log_dir.mkdir(parents=True, exist_ok=True)
         return tmp_log_dir
+
+    @property
+    def mcp_transport(self) -> str:
+        """Transport mode: 'stdio' or 'http'."""
+        value = os.getenv("MCP_TRANSPORT", "stdio").lower().strip()
+        if value not in ("stdio", "http"):
+            raise ValueError(
+                f"MCP_TRANSPORT must be 'stdio' or 'http', got: {value!r}"
+            )
+        return value
 
     def _apply_model_suffix(self, model: str) -> str:
         try:
@@ -191,6 +205,7 @@ class Config:
             "TAVILY_API_KEY": self._mask_api_key(self.tavily_api_key) if self.tavily_api_key else "未配置",
             "FIRECRAWL_API_URL": self.firecrawl_api_url,
             "FIRECRAWL_API_KEY": self._mask_api_key(self.firecrawl_api_key) if self.firecrawl_api_key else "未配置",
+            "MCP_TRANSPORT": self.mcp_transport,
             "config_status": config_status
         }
 

@@ -8,7 +8,7 @@ from tenacity.wait import wait_base
 from zoneinfo import ZoneInfo
 from .base import BaseSearchProvider, SearchResult
 from ..utils import search_prompt, fetch_prompt, url_describe_prompt, rank_sources_prompt
-from ..logger import log_info
+from ..logger import log_info, logger
 from ..config import config
 
 
@@ -121,6 +121,7 @@ class GrokSearchProvider(BaseSearchProvider):
     def __init__(self, api_url: str, api_key: str, model: str = "grok-4-fast"):
         super().__init__(api_url, api_key)
         self.model = model
+        logger.info("Using Grok model: %s", self.model)
 
     def get_provider_name(self) -> str:
         return "Grok"
@@ -150,10 +151,12 @@ class GrokSearchProvider(BaseSearchProvider):
         }
 
         await log_info(ctx, f"platform_prompt: { query + platform_prompt}", config.debug_enabled)
+        logger.info("Search query: %s", query)
 
         return await self._execute_stream_with_retry(headers, payload, ctx)
 
     async def fetch(self, url: str, ctx=None) -> str:
+        logger.info("Fetch URL: %s", url)
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",

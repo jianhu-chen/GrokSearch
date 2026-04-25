@@ -1,0 +1,8 @@
+services:
+  grok-search:
+    image: ghcr.io/jianhu-chen/grok-search:latest
+    # build: .  # 如需从源码构建，取消注释此行并注释掉 image 行
+    ports:
+      - "8000:8000"
+    env_file: .env
+    restart: unless-stopped

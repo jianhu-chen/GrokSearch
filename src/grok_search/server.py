@@ -13,13 +13,13 @@ from pydantic import Field
 # 尝试使用绝对导入（支持 mcp run）
 try:
     from grok_search.providers.grok import GrokSearchProvider
-    from grok_search.logger import log_info
+    from grok_search.logger import log_info, logger
     from grok_search.config import config
     from grok_search.sources import SourcesCache, merge_sources, new_session_id, split_answer_and_sources
     from grok_search.planning import engine as planning_engine, _split_csv
 except ImportError:
     from .providers.grok import GrokSearchProvider
-    from .logger import log_info
+    from .logger import log_info, logger
     from .config import config
     from .sources import SourcesCache, merge_sources, new_session_id, split_answer_and_sources
     from .planning import engine as planning_engine, _split_csv
@@ -52,6 +52,7 @@ async def _fetch_available_models(api_url: str, api_key: str) -> list[str]:
     for item in (data or {}).get("data", []) or []:
         if isinstance(item, dict) and isinstance(item.get("id"), str):
             models.append(item["id"])
+    logger.info("Fetched %d available models from %s", len(models), api_url)
     return models
 
 
@@ -63,7 +64,8 @@ async def _get_available_models_cached(api_url: str, api_key: str) -> list[str]:
 
     try:
         models = await _fetch_available_models(api_url, api_key)
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to fetch available models: %s", e)
         models = []
 
     async with _AVAILABLE_MODELS_LOCK:
@@ -167,21 +169,24 @@ async def web_search(
     async def _safe_grok() -> str:
         try:
             return await grok_provider.search(query, platform)
-        except Exception:
+        except Exception as e:
+            logger.error("Grok search failed: %s", e)
             return ""
 
     async def _safe_tavily() -> list[dict] | None:
         try:
             if tavily_count:
                 return await _call_tavily_search(query, tavily_count)
-        except Exception:
+        except Exception as e:
+            logger.error("Tavily search failed: %s", e)
             return None
 
     async def _safe_firecrawl() -> list[dict] | None:
         try:
             if firecrawl_count:
                 return await _call_firecrawl_search(query, firecrawl_count)
-        except Exception:
+        except Exception as e:
+            logger.error("Firecrawl search failed: %s", e)
             return None
 
     coros: list = [_safe_grok()]
@@ -251,7 +256,8 @@ async def _call_tavily_extract(url: str) -> str | None:
                 content = data["results"][0].get("raw_content", "")
                 return content if content and content.strip() else None
             return None
-    except Exception:
+    except Exception as e:
+        logger.error("Tavily extract failed for %s: %s", url, e)
         return None
 
 
@@ -279,7 +285,8 @@ async def _call_tavily_search(query: str, max_results: int = 6) -> list[dict] | 
                 {"title": r.get("title", ""), "url": r.get("url", ""), "content": r.get("content", ""), "score": r.get("score", 0)}
                 for r in results
             ] if results else None
-    except Exception:
+    except Exception as e:
+        logger.error("Tavily search failed: %s", e)
         return None
 
 
@@ -301,7 +308,8 @@ async def _call_firecrawl_search(query: str, limit: int = 14) -> list[dict] | No
                 {"title": r.get("title", ""), "url": r.get("url", ""), "description": r.get("description", "")}
                 for r in results
             ] if results else None
-    except Exception:
+    except Exception as e:
+        logger.error("Firecrawl search failed: %s", e)
         return None
 
 
@@ -329,9 +337,9 @@ async def _call_firecrawl_scrape(url: str, ctx=None) -> str | None:
                 markdown = data.get("data", {}).get("markdown", "")
                 if markdown and markdown.strip():
                     return markdown
-                await log_info(ctx, f"Firecrawl: markdown为空, 重试 {attempt + 1}/{max_retries}", config.debug_enabled)
+                logger.warning("Firecrawl: markdown为空, 重试 %d/%d", attempt + 1, max_retries)
         except Exception as e:
-            await log_info(ctx, f"Firecrawl error: {e}", config.debug_enabled)
+            logger.error("Firecrawl scrape failed for %s: %s", url, e)
             return None
     return None
 
@@ -535,56 +543,57 @@ async def get_config_info() -> str:
     return json.dumps(config_info, ensure_ascii=False, indent=2)
 
 
-@mcp.tool(
-    name="switch_model",
-    output_schema=None,
-    description="""
-    Switches the default Grok model used for search and fetch operations, persisting the setting.
+if config.switch_model_enabled:
+    @mcp.tool(
+        name="switch_model",
+        output_schema=None,
+        description="""
+        Switches the default Grok model used for search and fetch operations, persisting the setting.
 
-    **Key Features:**
-        - **Model Selection:** Change the AI model for web search and content fetching.
-        - **Persistent Storage:** Model preference saved to ~/.config/grok-search/config.json.
-        - **Immediate Effect:** New model used for all subsequent operations.
+        **Key Features:**
+            - **Model Selection:** Change the AI model for web search and content fetching.
+            - **Persistent Storage:** Model preference saved to ~/.config/grok-search/config.json.
+            - **Immediate Effect:** New model used for all subsequent operations.
 
-    **Edge Cases & Best Practices:**
-        - Use get_config_info to verify available models before switching.
-        - Invalid model IDs may cause API errors in subsequent requests.
-        - Model changes persist across sessions until explicitly changed again.
-    """,
-    meta={"version": "1.3.0", "author": "guda.studio"},
-)
-async def switch_model(
-    model: Annotated[str, "Model ID to switch to (e.g., 'grok-4-fast', 'grok-2-latest', 'grok-vision-beta')."]
-) -> str:
-    import json
+        **Edge Cases & Best Practices:**
+            - Use get_config_info to verify available models before switching.
+            - Invalid model IDs may cause API errors in subsequent requests.
+            - Model changes persist across sessions until explicitly changed again.
+        """,
+        meta={"version": "1.3.0", "author": "guda.studio"},
+    )
+    async def switch_model(
+        model: Annotated[str, "Model ID to switch to (e.g., 'grok-4-fast', 'grok-2-latest', 'grok-vision-beta')."]
+    ) -> str:
+        import json
 
-    try:
-        previous_model = config.grok_model
-        config.set_model(model)
-        current_model = config.grok_model
+        try:
+            previous_model = config.grok_model
+            config.set_model(model)
+            current_model = config.grok_model
 
-        result = {
-            "status": "✅ 成功",
-            "previous_model": previous_model,
-            "current_model": current_model,
-            "message": f"模型已从 {previous_model} 切换到 {current_model}",
-            "config_file": str(config.config_file)
-        }
+            result = {
+                "status": "✅ 成功",
+                "previous_model": previous_model,
+                "current_model": current_model,
+                "message": f"模型已从 {previous_model} 切换到 {current_model}",
+                "config_file": str(config.config_file)
+            }
 
-        return json.dumps(result, ensure_ascii=False, indent=2)
+            return json.dumps(result, ensure_ascii=False, indent=2)
 
-    except ValueError as e:
-        result = {
-            "status": "❌ 失败",
-            "message": f"切换模型失败: {str(e)}"
-        }
-        return json.dumps(result, ensure_ascii=False, indent=2)
-    except Exception as e:
-        result = {
-            "status": "❌ 失败",
-            "message": f"未知错误: {str(e)}"
-        }
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        except ValueError as e:
+            result = {
+                "status": "❌ 失败",
+                "message": f"切换模型失败: {str(e)}"
+            }
+            return json.dumps(result, ensure_ascii=False, indent=2)
+        except Exception as e:
+            result = {
+                "status": "❌ 失败",
+                "message": f"未知错误: {str(e)}"
+            }
+            return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 @mcp.tool(
@@ -843,6 +852,31 @@ def main():
     import signal
     import os
     import threading
+
+    transport = config.mcp_transport
+
+    if transport == "http":
+        # Set up auth if tokens are configured
+        from grok_search.auth import build_auth_provider
+        auth = build_auth_provider()
+        if auth:
+            mcp.auth = auth
+            token_count = len(auth.tokens)
+            print(
+                f"[grok-search] Authentication enabled ({token_count} token(s) loaded)",
+                file=sys.stderr,
+            )
+
+        # Run combined HTTP server (SSE + Streamable HTTP)
+        from grok_search.transport import run_http_server
+        try:
+            import asyncio
+            asyncio.run(run_http_server(mcp))
+        except KeyboardInterrupt:
+            pass
+        return
+
+    # --- stdio mode (default, backward compatible) ---
 
     # 信号处理（仅主线程）
     if threading.current_thread() is threading.main_thread():

@@ -1,3 +1,74 @@
+# 二次开发说明
+
+本仓库基于 [GuDaStudio/GrokSearch](https://github.com/GuDaStudio/GrokSearch) 进行二次开发，在原项目基础上新增了以下功能：
+
+## 云端部署（多传输模式 + 用户认证 + Docker）
+
+原项目仅支持本地 stdio 模式（每个客户端需运行独立进程）。本次开发新增：
+
+- **多传输模式同时支持**：HTTP 模式下同时提供 **SSE**（`/sse`）和 **Streamable HTTP**（`/mcp`）两种远程传输协议，客户端可任选其一连接
+- **用户认证**：通过预共享 Token（Bearer Token）鉴权，未授权的请求将被拒绝。支持环境变量和文件两种方式配置多个 Token
+- **Docker Compose 一键部署**：`docker compose up -d` 即可在云端启动服务，所有本地客户端通过网络连接
+
+## 增强异常处理与日志记录
+
+优化了服务端的异常捕获和日志输出，提升远程部署场景下的可观测性和稳定性。
+
+## 新增环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `MCP_TRANSPORT` | `stdio` | 传输模式：`stdio`（本地）或 `http`（远程） |
+| `MCP_AUTH_TOKENS` | _(空)_ | 用户认证 Token，逗号分隔（为空则不启用认证） |
+| `MCP_AUTH_TOKENS_FILE` | _(空)_ | Token 文件路径，每行一个 |
+| `ENABLE_SWITCH_MODEL` | `false` | 是否暴露 `switch_model` 工具。云端多用户场景下，任一用户切换模型会持久化并影响所有用户，因此默认关闭 |
+
+## 快速部署
+
+`docker-compose.yml` 默认使用 GHCR 预构建镜像，如需从源码构建可将 `build: .` 取消注释并注释 `image` 行。
+
+```bash
+cp .env.example .env          # 编辑 .env 填入 GROK_API_URL、GROK_API_KEY 等
+docker compose up -d          # 拉取预构建镜像并启动
+curl http://localhost:8000/health  # 验证
+```
+
+## 客户端连接示例
+
+```json
+// SSE 方式
+{
+  "type": "sse",
+  "url": "http://your-server:8000/sse",
+  "headers": { "Authorization": "Bearer your-token" }
+}
+
+// Streamable HTTP 方式
+{
+  "type": "http",
+  "url": "http://your-server:8000/mcp",
+  "headers": { "Authorization": "Bearer your-token" }
+}
+```
+
+Claude Code 添加命令：
+
+```bash
+# SSE 方式
+claude mcp add --transport sse grok-search http://your-server:8000/sse \
+  --header "Authorization: Bearer your-token"
+
+# Streamable HTTP 方式
+claude mcp add --transport http grok-search http://your-server:8000/mcp \
+  --header "Authorization: Bearer your-token"
+```
+
+---
+
+以下是原项目 README。
+
+---
+
 ![这是图片](./images/title.png)
 <div align="center">
 
@@ -39,7 +110,7 @@ Claude ──MCP──► Grok Search Server
 ![](./images/wogrok.png)
 如上图，**为公平实验，我们打开了claude模型内置的搜索工具**，然而opus 4.6仍然相信自己的内部常识，不查询FastAPI的官方文档，以获取最新示例。
 ![](./images/wgrok.png)
-如上图，当打开`grok-search MCP`时，在相同的实验条件下，opus 4.6主动调用多次搜索，以**获取官方文档，回答更可靠。** 
+如上图，当打开`grok-search MCP`时，在相同的实验条件下，opus 4.6主动调用多次搜索，以**获取官方文档，回答更可靠。**
 
 
 ## 二、安装
@@ -145,7 +216,7 @@ claude mcp add-json grok-search --scope user '{
 claude mcp list
 ```
 
-🍟 显示连接成功后，我们**十分推荐**在 Claude 对话中输入 
+🍟 显示连接成功后，我们**十分推荐**在 Claude 对话中输入
 ```
 调用 grok-search toggle_builtin_tools，关闭Claude Code's built-in WebSearch and WebFetch tools
 ```
